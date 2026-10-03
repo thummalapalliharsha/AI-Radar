@@ -1,0 +1,15 @@
+# AI Radar - local-first dependencies only.
+# No cloud SDKs, no API clients, no ChromaDB: SQLite + FAISS-CPU + local Ollama
+# over plain HTTP cover the whole pipeline.
+#
+# Lower bounds rather than hard pins, so installing into an existing virtualenv
+# never downgrades a working Streamlit or numpy.
+
+streamlit>=1.42
+feedparser>=6.0.11
+faiss-cpu>=1.7.4
+numpy>=1.25
+requests>=2.32
+python-dotenv>=1.0.1
+fastapi>=0.115
+uvicorn>=0.30

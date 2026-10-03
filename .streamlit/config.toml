@@ -1,0 +1,17 @@
+# AI Radar - local Streamlit settings.
+# The stylesheet in app/ui/styles.py is designed for a dark canvas, so the
+# theme is pinned here: without it the app inherits the user's global light
+# theme and Streamlit's own widget text renders light-on-light.
+
+[theme]
+base = "dark"
+primaryColor = "#6366f1"
+backgroundColor = "#080c16"
+secondaryBackgroundColor = "#0f172a"
+textColor = "#f1f5f9"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+fileWatcherType = "auto"
