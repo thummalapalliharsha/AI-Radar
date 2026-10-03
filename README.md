@@ -1,285 +1,749 @@
-﻿# AI Radar â€” Local AI Intelligence Platform
+# AI Radar — Local AI Intelligence Platform
 
-Tracks verified global AI developments â€” frontier models, agentic systems,
-developer tooling, research and policy â€” and answers questions about them.
-Everything runs on your machine: **SQLite + FAISS-CPU + local Ollama**. No cloud
-services, no API keys, no ChromaDB, no per-request cost.
+AI Radar is a local-first AI intelligence platform that collects, classifies,
+ranks, clusters, and semantically indexes AI news from multiple RSS sources.
+
+It focuses on major developments across AI/ML, frontier models, AI agents,
+developer tools, research, AI companies, jobs and careers, AI policy,
+robotics, open-source AI, and India AI.
+
+The platform combines RSS ingestion, local LLM analysis, FAISS semantic
+search, grounded RAG answers, story clustering, and morning/evening
+intelligence briefings into one pipeline.
+
+> **Local-first:** AI classification and embedding run through Ollama on your
+> machine. SQLite stores the news corpus and FAISS provides local semantic
+> retrieval.
 
 ---
 
-## What it does
+## ✨ Key Features
 
-| Capability | How |
+| Capability | Description |
 |---|---|
-| Live intelligence feed | 14 tiered RSS sources, deduplicated and classified by a local LLM |
-| Semantic search with RAG | `nomic-embed-text` embeddings in a persistent FAISS `IndexFlatIP` |
-| Hallucination guardrails | Domain gate, cosine-similarity threshold, and a strictly grounded answer prompt |
-| Morning briefing | 9:00 AM IST baseline snapshot of the top-ranked stories |
-| Evening update | 7:00 PM IST differential against the saved baseline, explicit when nothing new happened |
-| Multi-factor ranking | Importance, recency, career relevance, AI depth and source authority, with diversity caps |
-| Story clustering | Near-duplicate event coverage is collapsed into one story while preserving distinct source links |
+| 🌐 AI News Collection | Collects AI-related articles from tiered RSS sources |
+| 🧠 Local AI Classification | Uses Ollama to classify and analyze articles |
+| 🔎 Semantic AI Search | Searches the local AI news corpus using embeddings |
+| 📚 Grounded RAG | Generates answers only from retrieved AI Radar articles |
+| 🛡️ Search Guardrails | Domain filtering and similarity thresholds reduce irrelevant answers |
+| 📰 Latest AI Feed | Displays the newest verified AI stories |
+| 🌅 Morning Briefing | Creates a 9:00 AM IST baseline briefing |
+| 🌙 Evening Briefing | Detects significant developments since the morning baseline |
+| 📊 Multi-factor Ranking | Combines importance, recency, career relevance, AI depth and source authority |
+| 🧩 Story Clustering | Groups near-duplicate coverage of the same event |
+| 💼 AI Jobs & Careers | Tracks relevant AI career developments |
+| 🇮🇳 India AI | Provides a dedicated India-focused AI category |
+| 💻 Developer Intelligence | Tracks developer tools, APIs, frameworks and infrastructure |
+| 🤖 Models & Agents | Tracks model launches and agentic AI developments |
+| 🔬 AI Research | Tracks important research and technical breakthroughs |
+| 🔒 Local Storage | Uses SQLite and FAISS locally |
+| 💰 No Paid AI API Required | Local Ollama models handle classification and embeddings |
 
 ---
 
-## Requirements
+# 🏗️ Architecture
 
-- Python 3.12+
-- [Ollama](https://ollama.com/) running locally
+```text
+                    AI RADAR
+                       │
+                       ▼
+              ┌─────────────────┐
+              │   RSS Sources   │
+              │ Tiered Sources  │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ News Collector  │
+              │ URL / Title     │
+              │ Deduplication   │
+              │ Freshness       │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ SQLite Database │
+              │ Article Corpus  │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │  AI Analyzer    │
+              │ Local Ollama    │
+              │ Classification  │
+              │ Summarization   │
+              └────────┬────────┘
+                       │
+              ┌────────┴────────┐
+              ▼                 ▼
+       ┌──────────────┐  ┌───────────────┐
+       │   Ranking    │  │   Clustering  │
+       │ Importance   │  │ Near-Duplicate│
+       │ Recency      │  │ Events        │
+       │ AI Depth     │  └───────────────┘
+       │ Career       │
+       │ Authority    │
+       └──────┬───────┘
+              │
+              ▼
+       ┌──────────────┐
+       │   Ollama     │
+       │ Embeddings   │
+       │ nomic-embed  │
+       └──────┬───────┘
+              │
+              ▼
+       ┌──────────────┐
+       │ FAISS-CPU    │
+       │ Vector Store │
+       └──────┬───────┘
+              │
+       ┌──────┴─────────────┐
+       ▼                    ▼
+┌───────────────┐   ┌──────────────────┐
+│ AI Semantic   │   │ Morning / Evening│
+│ Search + RAG  │   │    Briefings     │
+└───────┬───────┘   └──────────────────┘
+        │
+        ▼
+┌─────────────────────────────┐
+│        Streamlit UI         │
+│ Latest • Search • Briefings │
+│ Research • Tools • Models   │
+│ Jobs • India AI             │
+└─────────────────────────────┘
+🧰 Technology Stack
+Backend
+Python 3.12+
+SQLite
+Ollama
+llama3.2:3b
+nomic-embed-text
+FAISS-CPU
+NumPy
+Feedparser
+Requests
+BeautifulSoup
+Python-dotenv
+Frontend
+Next.js
+React
+TypeScript
+Tailwind/CSS-based UI
+AI / Retrieval
+Local LLM classification
+Local embeddings
+FAISS IndexFlatIP
+Cosine-similarity retrieval
+Grounded RAG
+Retrieval thresholding
+Query-domain classification
+🖥️ Requirements
+Python 3.12+
+Node.js / npm for the frontend
+Ollama
+Windows, Linux, or macOS
 
-```bash
+Ollama must be running locally.
+
+Install the required models:
+
 ollama pull llama3.2:3b
 ollama pull nomic-embed-text
-ollama list          # confirm both are present
-```
 
-## Install
+Verify:
 
-```bash
+ollama list
+
+You should see both models available.
+
+🚀 Installation
+1. Clone the repository
+git clone https://github.com/thummalapalliharsha/AI-Radar.git
 cd AI-Radar
+2. Create the Python environment
+Windows
 python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # Linux / macOS
+.venv\Scripts\activate
+Linux / macOS
+python3 -m venv .venv
+source .venv/bin/activate
+3. Install Python dependencies
 pip install -r requirements.txt
-```
+⚙️ Configuration
 
-Optional `.env` overrides (defaults shown):
+AI Radar is designed to work with local Ollama defaults.
 
-```
+Optional .env configuration:
+
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
 EMBEDDING_MODEL=nomic-embed-text
-```
 
----
+No paid AI API key is required for the core local pipeline.
 
-## Run the dashboard
+🗄️ Local Data
 
-```bash
+Runtime data is intentionally kept out of GitHub.
+
+The application uses:
+
+data/
+├── ai_radar.db
+├── faiss_index.bin
+├── faiss_meta.json
+├── vector_store/
+└── briefing files / snapshots
+
+The database and generated vector data are local runtime artifacts and are
+excluded through .gitignore.
+
+A fresh clone can rebuild its local database and FAISS index by running the
+pipeline.
+
+▶️ Run the Dashboard
+
+From the project root:
+
 python -m streamlit run backend/app/ui/dashboard.py
-```
 
-Then open <http://localhost:8501>.
+Then open:
 
-The dashboard creates and migrates the SQLite schema before its first query, so
-it opens on a clean checkout as well as on an existing database.
+http://localhost:8501
 
-## Run the pipeline
+The dashboard initializes the local database before querying it.
 
-```bash
-python -m backend.app.main --status                     # telemetry: database, FAISS, Ollama
-python -m backend.app.main --collect                    # fetch RSS feeds
-python -m backend.app.main --process --limit 10         # classify with Ollama
-python -m backend.app.main --index                      # embed new stories into FAISS
-python -m backend.app.main --morning                    # 9 AM IST baseline briefing
-python -m backend.app.main --evening                    # 7 PM IST differential briefing
-python -m backend.app.main --full-pipeline --limit 10   # every stage in order
-```
+🔄 Run the AI Radar Pipeline
 
-Evening generation compares publication times only against a morning baseline
-from the same IST calendar day. If there is no valid same-day baseline, it
-records the unavailable attempt without replacing an existing evening snapshot.
-When a valid evening replaces the latest snapshot, the previous full snapshot
-is preserved under `data/evening_briefings/`; `data/briefing_history.json`
-continues to retain the generation audit history.
+The pipeline is divided into independent stages.
 
-Useful extras:
+Check system status
+python -m backend.app.main --status
 
-```bash
-python -m backend.app.main --collect --process --index            # collect, one analysis batch, then reconcile
-python -m backend.app.main --process --drain                     # finish analysing the window
-python -m backend.app.main --process --backlog --limit 50        # work through pre-window archive entries
-python -m backend.app.main --rebuild-index                       # re-embed everything from scratch
-```
+This reports:
 
-Each stage is safe to re-run. `--process` and `--index` are resumable: they pick
-up where the last run stopped, so a long backlog can be drained across several
-invocations.
+Database status
+Number of collected articles
+Verified AI stories
+Selected feed stories
+Active sources
+Pending analysis
+FAISS health
+Vector count
+Embedding model
+Ollama status
+Collect RSS articles
+python -m backend.app.main --collect
 
-The dashboard’s **Refresh radar feed** action collects the recent window,
-analyzes one bounded batch of the newest pending articles, then reconciles FAISS
-with every currently eligible article. Remaining unanalyzed articles are
-reported as backlog, not drained by the dashboard action. Feed-level failures
-are reported as partial collection, while the last successful refresh time is
-advanced only after collection, analysis, and index reconciliation complete.
+This fetches articles from the configured RSS sources.
 
-### Why `--drain` matters
+The collector performs:
 
-An article that has not been classified is invisible everywhere: it is excluded
-from the live feed, from the briefings, and from the FAISS index, so semantic
-search cannot retrieve it. A single `--process --limit 10` run analyses ten
-articles, while one collection run typically adds far more, so the pending set
-grows and the newest arrivals are all that ever get looked at.
+URL normalization
+Tracking-parameter removal
+Title/URL deduplication
+Freshness filtering
+Feed-level timeouts
+Source prioritization
+Process articles with Ollama
 
-Two things prevent an announcement from being lost in that gap:
+Process a bounded batch:
 
-1. **The pending set is prioritised, not truncated.** Every unanalysed article in
-   the window is ranked before the batch is taken off the top â€” by source tier
-   (primary labs first) and by how strongly the article's own title and summary
-   read as AI coverage. Ties break oldest-first, which is what guarantees the
-   queue drains instead of starving.
-2. **`--drain` repeats batches until the window is empty**, so the searchable
-   corpus matches what was actually collected. `--full-pipeline` drains by
-   default for the same reason. These explicit CLI drain operations may process
-   a large backlog; the dashboard refresh deliberately uses one bounded batch.
+python -m backend.app.main --process --limit 10
 
-`python -m backend.app.main --status` prints the next few articles the analyser will pick,
-so a growing backlog is visible rather than silent.
+Process the pending analysis queue:
 
-## Run the tests
+python -m backend.app.main --process --drain
 
-```bash
-python -m unittest discover -s tests -t .
-```
+Process older backlog entries:
 
-Cases that need Ollama or a built FAISS index skip themselves when either is
-unavailable.
+python -m backend.app.main --process --backlog --limit 50
 
----
+The local LLM determines information such as:
 
-## Architecture
+Whether the article is actually AI-related
+AI category
+Importance
+Career relevance
+AI depth
+Concise summary
+Why the development matters
+Build / reconcile the FAISS index
+python -m backend.app.main --index
 
-```
-14 tiered RSS feeds
-        |
-        v
-news_collector.py        URL normalisation, tracking-parameter stripping,
-                         title/URL dedup, 7-day freshness window, per-feed timeout
-        |
-        v
-data/ai_radar.db     SQLite, INSERT OR IGNORE on a UNIQUE url
-        |
-        v
-ai_analyzer.py           llama3.2:3b via Ollama: is_ai_news, category,
-process_articles.py      importance, career relevance, summary, why-it-matters
-                         queue ordered by source tier + AI signal, oldest-first
-                         within a band so nothing starves; --drain empties it
-        |
-        v
-ranking.py               importance 30% + recency 30% + career 15%
-                         + AI depth 15% + source authority 10%
-        v
-vector_store.py          nomic-embed-text -> FAISS IndexFlatIP (cosine),
-                         incremental append, metadata.json aligned row-for-row
-        |
-        v
-dashboard.py             Live feed, semantic search + RAG, briefings,
-                         category sub-feeds
-```
+The vector store uses:
 
----
+nomic-embed-text
+       ↓
+L2-normalized embeddings
+       ↓
+FAISS IndexFlatIP
 
-## How search avoids making things up
+The current retrieval system uses cosine similarity through normalized
+inner-product search.
 
-```
-user query
-    |
-    v
-domain gate            AI vocabulary accepted, off-topic vocabulary rejected,
-(components.py)        ambiguous wording sent to llama3.2:3b
-    |
-    |-- not an AI question --> "limited to AI and machine learning" card, no answer
-    v
-query embedding        nomic-embed-text via Ollama
-    |
-    v
-FAISS cosine search    IndexFlatIP over L2-normalised vectors
-    |
-    v
-similarity threshold   keep only hits >= MIN_SEMANTIC_SIMILARITY (0.55)
-    |
-    |-- nothing left ------> "no sufficiently relevant information" card, no answer
-    v
-                       numbered [1] [2] citations, told to refuse when the
-                       articles do not answer the question
-    |
-    v
-answer + verified source cards
-```
+🧠 Semantic Search + RAG
 
-Measured on this corpus, on-topic queries with real coverage score 0.60â€“0.75
-cosine similarity, while off-topic or uncovered queries top out around 0.50 â€” so
-the 0.55 threshold in `app/config.py` separates "answerable" from "say nothing".
+AI Radar does not simply send every user question to an LLM.
 
----
+The search pipeline is:
 
-## Categories
+User Question
+      │
+      ▼
+AI Domain Gate
+      │
+      ├── Not AI-related
+      │       ↓
+      │   Reject / guidance
+      │
+      ▼
+Query Embedding
+      │
+      ▼
+FAISS Semantic Search
+      │
+      ▼
+Similarity Threshold
+      │
+      ├── No sufficiently relevant articles
+      │       ↓
+      │   No answer generated
+      │
+      ▼
+Retrieved AI Articles
+      │
+      ▼
+Grounded Local LLM
+      │
+      ▼
+Answer + Supporting Sources
 
-`ALLOWED_CATEGORIES` in `app/config.py` is the single vocabulary, and
-`normalize_category()` resolves every other spelling onto it:
+The answer-generation prompt is designed to use only the retrieved AI Radar
+articles.
 
-```
-AI Models Â· AI Agents Â· AI Tools Â· AI Research Â· AI Companies
-AI Jobs & Careers Â· AI Policy Â· India AI Â· Robotics Â· Open Source AI Â· Other
-```
+This reduces the chance of producing unsupported answers when the local
+corpus does not contain sufficient information.
 
-Older rows keep whatever spelling they were stored with â€” the database is never
-rewritten â€” so `"Developers & Tools"` maps to `AI Tools`, and the feed query
-matches both. `"AI Hardware"` and `"AI Industry"` fold into `AI Companies`.
+🛡️ Search Guardrails
 
----
+AI Radar applies multiple checks before generating a response.
 
-## Briefings
+1. Domain Gate
 
-**Morning (9:00 AM IST)** â€” ranks the recent verified stories, applies the
-diversity caps, writes `data/morning_briefing.json` (the baseline), and appends
-to `data/briefing_history.json`. It leaves the most recent evening snapshot in
-`data/latest_briefing.json` available until the next evening update replaces it.
-**Evening (7:00 PM IST)** â€” loads the saved baseline and considers only articles
-published after it that the baseline did not already carry. If any clear the
-significance thresholds (importance â‰¥ 7, career â‰¥ 7, or score â‰¥ 7.0) they become
-the update; otherwise the briefing states plainly that there are no major new AI
-developments since the morning and repeats the baseline unchanged. Nothing is
-invented to fill the slot.
+Questions unrelated to AI/ML are rejected instead of being answered as
+general-purpose questions.
 
-## Story clustering
+2. Semantic Similarity Threshold
 
-Multiple outlets may report the same AI event. AI Radar uses the existing
-normalized FAISS article embeddings plus conservative shared-title-term checks
-to collapse near-duplicate event coverage into one representative story.
-Clusters retain each distinct source and original URL, while unrelated stories
-in the same category remain separate. This is stricter than URL/title
-deduplication because it can merge different reports of one event without
+Only sufficiently relevant FAISS results are passed to the answer-generation
+stage.
 
-Schedule them with cron or Task Scheduler (times in UTC):
+3. Grounded Answer Prompt
 
-```
-0 */2 * * *  cd /path/to/AI-Radar && python -m backend.app.main --collect --process --index
-30 3   * * *  cd /path/to/AI-Radar && python -m backend.app.main --morning    # 9:00 AM IST
-30 13  * * *  cd /path/to/AI-Radar && python -m backend.app.main --evening    # 7:00 PM IST
-```
+The local LLM is instructed to answer from the retrieved article context.
 
----
+4. No Relevant Evidence
 
-## Layout
+If the local corpus does not contain sufficiently relevant information, the
+system returns a "no sufficiently relevant information" response instead of
+inventing an answer.
 
-```
-app/
-  config.py                 paths, Ollama endpoints, thresholds, category vocabulary
-  main.py                   pipeline CLI
-  services/
-    news_collector.py       RSS ingestion
-    ai_analyzer.py          Ollama classification
-    process_articles.py     batch analysis runner
-    ranking.py              multi-factor ranking
-    vector_store.py         FAISS index + semantic search
-    briefing_generator.py   morning baseline / evening differential
-  ui/
-    dashboard.py            Streamlit entry point
-    components.py           cards, query gate, grounded answers
-    styles.py               CSS (system fonts only, no CDN)
-  utils/
-    database.py             SQLite schema and queries
-data/ai_radar.db             collected articles
-data/vector_store/           ai_radar.index + metadata.json
-data/evening_briefings/      archived evening snapshots
-tests/                       unit and integration tests
-```
+📰 News Categories
 
-## Data safety
+AI Radar uses a controlled category vocabulary:
 
-No command in this project drops a table, deletes an article, or removes a
-briefing snapshot. `initialize_database()` only adds missing schema objects and
-fills NULL `published_timestamp` values, and `--index` appends to the existing
-FAISS index rather than replacing it. The one destructive-by-design command is
-`--rebuild-index`, which re-embeds every verified article and overwrites the
-index file; the SQLite database is still left untouched.
+AI Models
+AI Agents
+AI Tools
+AI Research
+AI Companies
+AI Jobs & Careers
+AI Policy
+India AI
+Robotics
+Open Source AI
+Other
+
+The classifier uses article content rather than relying only on the RSS
+category.
+
+This is important because broad technology feeds can contain articles that
+are not actually about AI.
+
+📊 Story Ranking
+
+Stories are ranked using multiple signals:
+
+Importance       30%
+Recency          30%
+Career relevance 15%
+AI depth         15%
+Source authority 10%
+
+The ranking system also applies diversity controls so that the feed does not
+become dominated by one source or one category.
+
+🧩 Story Clustering
+
+Different publications may report the same underlying AI event.
+
+AI Radar performs an additional clustering stage after normal URL/title
+deduplication.
+
+Article A ──┐
+Article B ──┼── Same underlying event
+Article C ──┘
+                 ↓
+          Representative Story
+                 +
+          Distinct Source Links
+
+The objective is to reduce repetitive coverage while preserving access to
+different source reports.
+
+🌅 Morning Briefing
+
+The morning briefing establishes the day's baseline.
+
+Target time:
+
+9:00 AM IST
+
+The process:
+
+Recent verified AI stories
+        ↓
+Ranking
+        ↓
+Diversity filtering
+        ↓
+Top stories
+        ↓
+Morning baseline
+
+Each briefing item can contain:
+
+Headline
+Concise summary
+Why it matters
+Category
+Source
+Source URL
+
+The morning snapshot becomes the reference point for the evening update.
+
+🌙 Evening Briefing
+
+The evening briefing is designed as a differential update, rather than
+another copy of the morning briefing.
+
+Target time:
+
+7:00 PM IST
+
+The system:
+
+Morning baseline
+       +
+Newly published AI stories
+       ↓
+Compare
+       ↓
+Significance filtering
+       ↓
+Major new developments
+       ↓
+Evening update
+
+The evening briefing considers developments published after the morning
+baseline and avoids repeating stories that were already included.
+
+If no sufficiently significant new developments are found, the system can
+explicitly report:
+
+No major new AI developments since the morning briefing.
+
+This prevents the system from inventing stories merely to fill an evening
+briefing slot.
+
+🔁 Full Pipeline
+
+Run all major stages together:
+
+python -m backend.app.main --full-pipeline --limit 10
+
+For a larger pending queue, the pipeline can process the analysis backlog
+using the available drain functionality.
+
+Individual stages can also be run independently:
+
+python -m backend.app.main --collect
+python -m backend.app.main --process --limit 10
+python -m backend.app.main --index
+python -m backend.app.main --morning
+python -m backend.app.main --evening
+⏱️ Refresh Workflow
+
+The dashboard's refresh operation is intentionally bounded.
+
+It can:
+
+Collect recent articles
+Analyze a bounded number of pending articles
+Reconcile the FAISS index
+Refresh the feed
+
+It does not automatically drain an unlimited backlog during a UI refresh.
+
+This keeps the dashboard responsive while allowing the CLI to process larger
+backlogs separately.
+
+🧪 Testing
+
+Run the test suite with:
+
+python -m unittest discover -s backend/tests -t .
+
+Tests cover areas including:
+
+Database behavior
+Analysis queue
+Search
+FAISS retrieval
+Dashboard behavior
+Briefings
+Pipeline execution
+Story clustering
+Refresh behavior
+API behavior
+Status reporting
+
+Tests requiring Ollama or an existing FAISS index can skip themselves when
+those dependencies are unavailable.
+
+📁 Project Structure
+AI-Radar/
+│
+├── backend/
+│   ├── __init__.py
+│   │
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   ├── main.py
+│   │   │
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   └── server.py
+│   │   │
+│   │   ├── services/
+│   │   │   ├── ai_analyzer.py
+│   │   │   ├── briefing_generator.py
+│   │   │   ├── news_collector.py
+│   │   │   ├── process_articles.py
+│   │   │   ├── ranking.py
+│   │   │   ├── refresh_radar.py
+│   │   │   ├── story_clustering.py
+│   │   │   ├── top_stories.py
+│   │   │   └── vector_store.py
+│   │   │
+│   │   ├── ui/
+│   │   │   ├── components.py
+│   │   │   ├── dashboard.py
+│   │   │   ├── styles.py
+│   │   │   └── top_story_components.py
+│   │   │
+│   │   └── utils/
+│   │       ├── database.py
+│   │       └── url_normalization.py
+│   │
+│   ├── tests/
+│   │   ├── test_analysis_queue.py
+│   │   ├── test_api.py
+│   │   ├── test_briefing.py
+│   │   ├── test_dashboard.py
+│   │   ├── test_database.py
+│   │   ├── test_faiss_search.py
+│   │   ├── test_pipeline.py
+│   │   ├── test_refresh.py
+│   │   ├── test_search.py
+│   │   ├── test_status.py
+│   │   ├── test_story_clustering.py
+│   │   └── test_top_stories.py
+│   │
+│   └── test_clusters.py
+│
+├── frontend/
+│   ├── app/
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   └── lab/
+│   │       └── hero-object/
+│   │
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── next.config.ts
+│   └── tsconfig.json
+│
+├── .streamlit/
+│   └── config.toml
+│
+├── data/
+│   └── local runtime data
+│
+├── .gitignore
+├── README.md
+└── requirements.txt
+🔐 Data & Security
+
+Local runtime data is excluded from version control.
+
+The repository does not commit:
+
+.env
+.env.local
+*.db
+FAISS indexes
+FAISS metadata
+node_modules/
+.next/
+frontend_old/
+generated briefing files
+logs
+
+The local database and vector store remain on the developer's machine.
+
+Do not commit API keys, passwords, tokens, private credentials, or other
+secrets to the repository.
+
+🛠️ Useful Commands
+System status
+python -m backend.app.main --status
+Collect news
+python -m backend.app.main --collect
+Analyze a batch
+python -m backend.app.main --process --limit 10
+Drain pending analysis
+python -m backend.app.main --process --drain
+Process archive backlog
+python -m backend.app.main --process --backlog --limit 50
+Update FAISS
+python -m backend.app.main --index
+Rebuild FAISS
+python -m backend.app.main --rebuild-index
+
+--rebuild-index re-embeds the verified article corpus and replaces the
+existing FAISS index. The SQLite database is not deleted.
+
+Morning briefing
+python -m backend.app.main --morning
+Evening briefing
+python -m backend.app.main --evening
+Full pipeline
+python -m backend.app.main --full-pipeline --limit 10
+Start Streamlit
+python -m streamlit run backend/app/ui/dashboard.py
+🔄 Recommended Daily Workflow
+                  ┌────────────────────┐
+                  │     RSS Sources    │
+                  └─────────┬──────────┘
+                            │
+                            ▼
+                     Collect Articles
+                            │
+                            ▼
+                    Local AI Analysis
+                            │
+                            ▼
+                     Rank + Cluster
+                            │
+                            ▼
+                      FAISS Index
+                            │
+              ┌─────────────┴─────────────┐
+              ▼                           ▼
+       9:00 AM IST                  7:00 PM IST
+       Morning Baseline             Evening Delta
+              │                           │
+              └─────────────┬─────────────┘
+                            ▼
+                     AI Radar Dashboard
+🎯 Project Goals
+
+AI Radar is designed around five principles:
+
+1. Verified over viral
+
+Prioritize reliable and meaningful AI developments rather than rumors or
+unverified claims.
+
+2. Local over dependent
+
+Use local models and local storage wherever practical.
+
+3. Grounded over generative
+
+Answers should be based on retrieved AI Radar evidence rather than unsupported
+model knowledge.
+
+4. Differential over repetitive
+
+The evening briefing should identify what changed since the morning instead
+of simply repeating the day's news.
+
+5. Useful over noisy
+
+Ranking, classification, deduplication, and clustering are used to reduce
+the amount of repetitive information presented to the user.
+
+📌 Current Status
+
+AI Radar currently includes:
+
+RSS-based AI news collection
+Local Ollama classification
+SQLite article storage
+FAISS semantic search
+Local embedding generation
+Grounded RAG answers
+Similarity-based retrieval filtering
+Multi-factor story ranking
+Story clustering
+Latest AI feed
+Morning briefing generation
+Evening differential briefing
+Research/category feeds
+Developer and tooling coverage
+Models and agents coverage
+AI jobs and careers coverage
+India AI coverage
+Streamlit dashboard
+Automated pipeline CLI
+Unit/integration tests
+🚧 Future Improvements
+
+Potential future extensions include:
+
+Automated Windows Task Scheduler integration
+Daily email delivery
+AI briefing podcast generation
+More multilingual Indian AI coverage
+Improved event-level clustering
+Additional source verification
+More detailed source-quality scoring
+Production deployment
+Expanded analytics and historical trend views
+📜 License
+
+Add the project's chosen open-source license here before publishing a formal
+release.
+
+Author
+
+Harsha Thummalapalli
+
+GitHub:
+
+https://github.com/thummalapalliharsha
