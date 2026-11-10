@@ -16,10 +16,15 @@ structure is rewritten. Pass rebuild=True (or `python -m backend.app.main
 No ChromaDB, no cloud embeddings, no API keys.
 """
 
+import hashlib
 import json
+import os
 import re
+import shutil
+import tempfile
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import faiss
 import numpy as np
@@ -27,6 +32,7 @@ import requests
 
 from backend.app.config import (
     EMBEDDING_MODEL,
+    FAISS_GENERATION_MANIFEST_PATH,
     FAISS_INDEX_PATH,
     FAISS_META_PATH,
     MIN_SEMANTIC_SIMILARITY,
@@ -36,6 +42,7 @@ from backend.app.config import (
     VECTOR_STORE_DIR,
     normalize_category,
 )
+from backend.app.services.versioned_vector_store import load_generation
 
 TEMPORAL_QUERY_TERMS = (
     "latest",
@@ -50,7 +57,14 @@ TEMPORAL_QUERY_TERMS = (
 from backend.app.utils.database import (
     get_indexable_articles,
     mark_as_indexed,
-    reset_embedding_flags,
+    replace_embedding_flags,
+)
+from backend.app.services.versioned_vector_store import (
+    active_generation_id,
+    exclusive_file_lock,
+    generation_details,
+    load_generation,
+    write_and_activate_generation,
 )
 
 # Kept as module attributes so existing callers and tests keep working.
@@ -62,6 +76,16 @@ OLLAMA_URL = OLLAMA_EMBED_URL
 def ensure_vector_dir() -> None:
     """Create the vector-store directory on demand (never at import time)."""
     VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _fixed_store_lock_path() -> Path:
+    """Return a stable lock path outside the fixed-path vector-store directory."""
+    paths = (
+        os.path.normcase(str(INDEX_PATH.resolve())),
+        os.path.normcase(str(METADATA_PATH.resolve())),
+    )
+    digest = hashlib.sha256("\0".join(paths).encode("utf-8")).hexdigest()
+    return Path(tempfile.gettempdir()) / "ai-radar-locks" / f"{digest}.lock"
 
 
 # ============================================================
@@ -171,8 +195,25 @@ def recency_score(published_timestamp: Any, now: Optional[datetime] = None) -> f
 # INDEX PERSISTENCE
 # ============================================================
 
-def load_metadata() -> List[Dict[str, Any]]:
-    """Read metadata.json, returning [] when it is missing or unreadable."""
+def load_metadata(
+    manifest_path: Optional[Union[str, os.PathLike]] = None,
+    generation_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Read metadata from the selected generation or legacy fixed path."""
+    selected_manifest = (
+        manifest_path
+        if manifest_path is not None
+        else FAISS_GENERATION_MANIFEST_PATH
+    )
+    if selected_manifest is not None:
+        return load_generation(selected_manifest, generation_id=generation_id)[1]
+    if generation_id is not None:
+        raise ValueError("generation_id requires a versioned generation manifest.")
+    with exclusive_file_lock(_fixed_store_lock_path()):
+        return _load_fixed_metadata()
+
+
+def _load_fixed_metadata() -> List[Dict[str, Any]]:
     if not METADATA_PATH.exists():
         return []
     try:
@@ -184,52 +225,187 @@ def load_metadata() -> List[Dict[str, Any]]:
         return []
 
 
-def load_index() -> Tuple[Optional[faiss.Index], List[Dict[str, Any]]]:
+def load_index(
+    manifest_path: Optional[Union[str, os.PathLike]] = None,
+    generation_id: Optional[str] = None,
+) -> Tuple[Optional[faiss.Index], List[Dict[str, Any]]]:
     """
-    Load the persisted index and its metadata.
+    Load the persisted index and its metadata. A configured generation manifest
+    is validated strictly and raises GenerationError rather than falling back.
 
     Returns (None, []) when either artefact is missing, unreadable, or when the
     two have drifted out of alignment. Reconciliation then has no safely
     addressable retained vectors and must generate a replacement corpus.
     """
-    if not INDEX_PATH.exists() or not METADATA_PATH.exists():
-        return None, []
+    selected_manifest = (
+        manifest_path
+        if manifest_path is not None
+        else FAISS_GENERATION_MANIFEST_PATH
+    )
+    if selected_manifest is not None:
+        return load_generation(selected_manifest, generation_id=generation_id)
+    if generation_id is not None:
+        raise ValueError("generation_id requires a versioned generation manifest.")
+    with exclusive_file_lock(_fixed_store_lock_path()):
+        if not INDEX_PATH.exists() or not METADATA_PATH.exists():
+            return None, []
 
-    try:
-        index = faiss.read_index(str(INDEX_PATH))
-    except Exception as error:
-        print(f"Could not read {INDEX_PATH.name}: {error}")
-        return None, []
+        try:
+            index = faiss.read_index(str(INDEX_PATH))
+        except Exception as error:
+            print(f"Could not read {INDEX_PATH.name}: {error}")
+            return None, []
 
-    metadata = load_metadata()
+        metadata = _load_fixed_metadata()
 
-    if index.ntotal != len(metadata):
-        print(
-            f"FAISS index and metadata are out of sync "
-            f"({index.ntotal} vectors vs {len(metadata)} records). "
-            "A full rebuild is required."
+        if index.ntotal != len(metadata):
+            print(
+                f"FAISS index and metadata are out of sync "
+                f"({index.ntotal} vectors vs {len(metadata)} records). "
+                "A full rebuild is required."
+            )
+            return None, []
+
+        return index, metadata
+
+
+def save_index(
+    index: faiss.Index,
+    metadata: List[Dict[str, Any]],
+    manifest_path: Optional[Union[str, os.PathLike]] = None,
+    expected_active_generation: Optional[str] = None,
+) -> Optional[str]:
+    """Persist a validated pair to fixed paths or an immutable active generation."""
+    selected_manifest = (
+        manifest_path
+        if manifest_path is not None
+        else FAISS_GENERATION_MANIFEST_PATH
+    )
+    if selected_manifest is not None:
+        return write_and_activate_generation(
+            selected_manifest,
+            index,
+            metadata,
+            expected_active_generation=expected_active_generation,
         )
-        return None, []
+    if expected_active_generation is not None:
+        raise ValueError(
+            "expected_active_generation requires a versioned generation manifest."
+        )
 
-    return index, metadata
-
-
-def save_index(index: faiss.Index, metadata: List[Dict[str, Any]]) -> None:
-    """Persist the index and metadata atomically enough for a local tool."""
     ensure_vector_dir()
-    faiss.write_index(index, str(INDEX_PATH))
-    with open(METADATA_PATH, "w", encoding="utf-8") as handle:
-        json.dump(metadata, handle, indent=2, ensure_ascii=False)
+    with exclusive_file_lock(_fixed_store_lock_path()):
+        staging_dir = Path(
+            tempfile.mkdtemp(prefix=".vector-store-stage-", dir=INDEX_PATH.parent)
+        )
+        backup_dir = staging_dir / "backup"
+        backup_dir.mkdir()
+        staged_index = staging_dir / "ai_radar.index"
+        staged_metadata = staging_dir / "metadata.json"
+        backup_index = backup_dir / "ai_radar.index"
+        backup_metadata = backup_dir / "metadata.json"
+        index_replaced = False
+        metadata_replaced = False
+        preserve_recovery = False
+        try:
+            if not isinstance(index, faiss.Index) or not index.is_trained or index.d <= 0:
+                raise ValueError("A trained, non-empty-dimension FAISS index is required.")
+            if index.ntotal != len(metadata):
+                raise ValueError("FAISS vector and metadata counts do not match.")
+            records = json.loads(
+                json.dumps(metadata, ensure_ascii=False, allow_nan=False)
+            )
+            identifiers = [record.get("id") for record in records]
+            if any(
+                isinstance(article_id, bool) or not isinstance(article_id, int)
+                for article_id in identifiers
+            ) or len(set(identifiers)) != len(identifiers):
+                raise ValueError("Metadata must contain unique integer article IDs.")
+            if index.metric_type != faiss.METRIC_INNER_PRODUCT:
+                raise ValueError("Only IndexFlatIP-compatible vectors are supported.")
+            if index.ntotal:
+                vectors = np.asarray(index.reconstruct_n(0, index.ntotal))
+                if vectors.shape != (index.ntotal, index.d) or not np.isfinite(vectors).all():
+                    raise ValueError("FAISS vectors contain invalid values.")
+
+            faiss.write_index(index, str(staged_index))
+            staged_metadata.write_text(
+                json.dumps(records, indent=2, ensure_ascii=False, allow_nan=False),
+                encoding="utf-8",
+            )
+            reopened = faiss.read_index(str(staged_index))
+            if reopened.ntotal != len(records) or reopened.d != index.d:
+                raise ValueError("Staged FAISS index failed validation.")
+            with staged_metadata.open("r", encoding="utf-8") as handle:
+                reopened_metadata = json.load(handle)
+            if len(reopened_metadata) != reopened.ntotal:
+                raise ValueError("Staged metadata failed validation.")
+
+            if INDEX_PATH.exists():
+                shutil.copyfile(INDEX_PATH, backup_index)
+            if METADATA_PATH.exists():
+                shutil.copyfile(METADATA_PATH, backup_metadata)
+            os.replace(staged_index, INDEX_PATH)
+            index_replaced = True
+            os.replace(staged_metadata, METADATA_PATH)
+            metadata_replaced = True
+            saved_index = faiss.read_index(str(INDEX_PATH))
+            with METADATA_PATH.open("r", encoding="utf-8") as handle:
+                saved_metadata = json.load(handle)
+            if saved_index.ntotal != len(saved_metadata):
+                raise ValueError("Persisted FAISS pair failed validation.")
+        except Exception:
+            restore_errors = []
+            if index_replaced and backup_index.exists():
+                try:
+                    os.replace(backup_index, INDEX_PATH)
+                except OSError as error:
+                    restore_errors.append(f"index restore failed: {error}")
+            elif index_replaced and not backup_index.exists():
+                INDEX_PATH.unlink(missing_ok=True)
+            if metadata_replaced and backup_metadata.exists():
+                try:
+                    os.replace(backup_metadata, METADATA_PATH)
+                except OSError as error:
+                    restore_errors.append(f"metadata restore failed: {error}")
+            elif metadata_replaced and not backup_metadata.exists():
+                METADATA_PATH.unlink(missing_ok=True)
+            if restore_errors:
+                preserve_recovery = True
+                raise RuntimeError(
+                    "Index persistence failed and recovery was incomplete: "
+                    + "; ".join(restore_errors)
+                    + f"; recovery files remain at {staging_dir}"
+                )
+            raise
+        finally:
+            if not preserve_recovery:
+                shutil.rmtree(staging_dir, ignore_errors=True)
+    return None
 
 
 def get_index_stats() -> Dict[str, Any]:
     """Health snapshot of the vector store."""
-    index, metadata = load_index()
+    details = (
+        generation_details(FAISS_GENERATION_MANIFEST_PATH)
+        if FAISS_GENERATION_MANIFEST_PATH is not None
+        else None
+    )
+    index, metadata = (
+        load_generation(
+            FAISS_GENERATION_MANIFEST_PATH,
+            generation_id=details["generation_id"],
+        )
+        if details is not None
+        else load_index()
+    )
 
     if index is None:
-        return {
+        stats = {
             "indexed": 0,
-            "metadata": len(load_metadata()),
+            "metadata": len(load_metadata())
+            if FAISS_GENERATION_MANIFEST_PATH is None
+            else 0,
             "index_exists": INDEX_PATH.exists(),
             "healthy": False,
             "dimension": None,
@@ -238,18 +414,23 @@ def get_index_stats() -> Dict[str, Any]:
             "index_path": str(INDEX_PATH),
             "metadata_path": str(METADATA_PATH),
         }
+    else:
+        stats = {
+            "indexed": int(index.ntotal),
+            "metadata": len(metadata),
+            "index_exists": True,
+            "healthy": True,
+            "dimension": int(index.d),
+            "indexed_documents": int(index.ntotal),
+            "embedding_model": EMBEDDING_MODEL,
+            "index_path": str(INDEX_PATH),
+            "metadata_path": str(METADATA_PATH),
+        }
 
-    return {
-        "indexed": int(index.ntotal),
-        "metadata": len(metadata),
-        "index_exists": True,
-        "healthy": True,
-        "dimension": int(index.d),
-        "indexed_documents": int(index.ntotal),
-        "embedding_model": EMBEDDING_MODEL,
-        "index_path": str(INDEX_PATH),
-        "metadata_path": str(METADATA_PATH),
-    }
+    if details is not None:
+        stats.update(details)
+        stats["manifest_path"] = str(FAISS_GENERATION_MANIFEST_PATH)
+    return stats
 
 
 # ============================================================
@@ -268,7 +449,39 @@ def sync_embeddings(
     re-embedded. The local IndexFlatIP structure is rewritten from retained and
     newly generated vectors; this is not a full Ollama re-embedding.
     """
+    selected_manifest = FAISS_GENERATION_MANIFEST_PATH
+    sync_lock_path = (
+        Path(selected_manifest).with_name(
+            f".{Path(selected_manifest).name}.sync.lock"
+        )
+        if selected_manifest is not None
+        else INDEX_PATH.parent / ".vector-store-sync.lock"
+    )
+    with exclusive_file_lock(sync_lock_path):
+        return _sync_embeddings_locked(
+            batch_size=batch_size,
+            rebuild=rebuild,
+            verbose=verbose,
+            manifest_path=selected_manifest,
+        )
+
+
+def _sync_embeddings_locked(
+    batch_size: Optional[int],
+    rebuild: bool,
+    verbose: bool,
+    manifest_path: Optional[Union[str, os.PathLike]],
+) -> Dict[str, Any]:
     articles = [dict(row) for row in get_indexable_articles()]
+    expected_active_generation = (
+        active_generation_id(manifest_path) if manifest_path is not None else None
+    )
+    if manifest_path is not None:
+        index, metadata = load_generation(
+            manifest_path, generation_id=expected_active_generation
+        )
+    else:
+        index, metadata = load_index()
 
     if verbose:
         print("=" * 70)
@@ -278,10 +491,8 @@ def sync_embeddings(
         print(f"Embedding model      : {EMBEDDING_MODEL}")
         print(f"Index file           : {INDEX_PATH}")
 
-    index, metadata = load_index()
     if rebuild:
         index, metadata = None, []
-        reset_embedding_flags()
         if verbose:
             print("Mode                 : full rebuild (forced)")
     elif verbose:
@@ -380,9 +591,18 @@ def sync_embeddings(
         if len(matrix):
             reconciled_index.add(matrix)
         reconciled_metadata = [metadata_by_id[article_id] for article_id in ordered_ids]
-        save_index(reconciled_index, reconciled_metadata)
+        save_index(
+            reconciled_index,
+            reconciled_metadata,
+            manifest_path=manifest_path,
+            expected_active_generation=expected_active_generation,
+        )
         unchanged_ids = [article_id for article_id in retained_ids if article_id not in changed_ids]
-        mark_as_indexed(embedded_ids + unchanged_ids)
+        indexed_ids = embedded_ids + unchanged_ids
+        if rebuild:
+            replace_embedding_flags(indexed_ids)
+        else:
+            mark_as_indexed(indexed_ids)
         indexed_count = int(reconciled_index.ntotal)
     else:
         indexed_count = 0
@@ -527,6 +747,3 @@ if __name__ == "__main__":
 
     print("\nSynchronising...")
     print(sync_embeddings())
-
-
-

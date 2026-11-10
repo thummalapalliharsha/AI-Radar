@@ -46,6 +46,14 @@ DATABASE_PATH = DATABASE_DIR / "ai_radar.db"
 # The live artefacts the pipeline reads and writes.
 FAISS_INDEX_PATH = VECTOR_STORE_DIR / "ai_radar.index"
 FAISS_META_PATH = VECTOR_STORE_DIR / "metadata.json"
+_FAISS_GENERATION_MANIFEST = os.getenv("FAISS_GENERATION_MANIFEST_PATH")
+if _FAISS_GENERATION_MANIFEST:
+    _manifest_path = Path(_FAISS_GENERATION_MANIFEST).expanduser()
+    FAISS_GENERATION_MANIFEST_PATH = (
+        _manifest_path if _manifest_path.is_absolute() else BASE_DIR / _manifest_path
+    )
+else:
+    FAISS_GENERATION_MANIFEST_PATH = None
 
 # Older builds wrote a flat index directly into data/. Those files are kept on
 # disk for reference but are no longer read or written by the pipeline.
@@ -269,4 +277,3 @@ def category_match_values(canonical: str) -> List[str]:
         if mapped == target and alias
     )
     return sorted(values)
-

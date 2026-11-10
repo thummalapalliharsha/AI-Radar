@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
-import { Inter, Newsreader } from "next/font/google";
+import { Inter, Oxanium } from "next/font/google";
 import "./globals.css";
+import { SiteBackground } from "./SiteBackground";
+import { SectionNavigation } from "./SectionNavigation";
+import { CinematicIntro } from "./CinematicIntro";
 
-const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-editorial", display: "swap" });
+const oxanium = Oxanium({ subsets: ["latin"], variable: "--font-heading", display: "swap" });
 const inter = Inter({ subsets: ["latin"], variable: "--font-ui", display: "swap" });
 
 export const metadata: Metadata = {
@@ -12,8 +15,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${newsreader.variable} ${inter.variable}`}>
-      <body>{children}</body>
+    <html lang="en" className={`${oxanium.variable} ${inter.variable}`}>
+      <body>
+        <SiteBackground />
+        <CinematicIntro />
+        <SectionNavigation />
+        {children}
+      </body>
     </html>
   );
 }

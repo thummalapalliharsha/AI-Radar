@@ -18,12 +18,13 @@ from backend.app.config import (
     MORNING_BRIEFING_FILE,
     TOP_K_SEARCH_RESULTS,
 )
-from backend.app.services.vector_store import search_vector_store
+from backend.app.services.vector_store import get_index_stats, search_vector_store
 from backend.app.ui.components import (
     NO_GROUNDED_FACTS_MESSAGE,
     check_ollama,
     classify_search_intent,
     generate_grounded_answer,
+    has_valid_answer_citations,
     validate_retrieved_articles,
 )
 from backend.app.utils.database import get_latest_news, parse_published_value
@@ -33,7 +34,10 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3010",
+    ],
     allow_methods=["GET"],
     allow_headers=[],
 )
@@ -75,10 +79,17 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/index/status")
+def index_status() -> dict[str, Any]:
+    """Report the generation selected by this process's loaded configuration."""
+    return get_index_stats()
+
+
 @app.get("/api/stories")
 def stories(
     window: Literal["24h", "7d"] = Query(...),
     limit: int = Query(20, ge=1, le=50),
+    category: Literal["AI Research", "AI Models", "AI Agents"] | None = Query(None),
 ) -> list[dict[str, str | None]]:
     if not DATABASE_PATH.is_file():
         raise HTTPException(status_code=503, detail="The story database is unavailable.")
@@ -88,7 +99,7 @@ def stories(
     duration = timedelta(hours=24) if window == "24h" else timedelta(days=7)
     cutoff = (now - duration).timestamp()
 
-    rows = get_latest_news(limit=50, min_importance=0)
+    rows = get_latest_news(limit=50, category=category, min_importance=0)
     matching: list[tuple[float, dict[str, str | None]]] = []
 
     for row in rows:
@@ -250,6 +261,8 @@ def search(q: str = Query(..., min_length=1, max_length=1000)) -> dict[str, Any]
                 "status": "no_relevant_information",
                 "message": answer,
             }
+        if answer and not has_valid_answer_citations(answer, len(sources)):
+            answer = None
         if not answer:
             return {
                 "status": "sources_only",

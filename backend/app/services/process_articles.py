@@ -1,5 +1,7 @@
 ﻿import sys
 import argparse
+import time
+import traceback
 from typing import Dict
 
 """
@@ -183,14 +185,22 @@ def process_articles_batch(
         priority = analysis_priority(row)
 
         print(
-            f"[{idx}/{total_found}] (p{priority}) {title[:68]}... ({source})"
+            f"[{idx}/{total_found}] (p{priority}) {title[:68]}... ({source})",
+            flush=True,
         )
+        print(
+            f"    Analysis started; waiting for Ollama response (article id={article_id}).",
+            flush=True,
+        )
+        started_at = time.perf_counter()
+        persisted = False
 
         try:
             analysis = analyze_article(article)
             if analysis:
                 update_ai_analysis(article_id, analysis)
                 successful += 1
+                persisted = True
                 status_icon = "â­ AI News" if analysis["is_ai_news"] else "ðŸš« Non-AI (Filtered)"
                 print(f"    â””â”€ {status_icon} | Cat: {analysis['category']} | Imp: {analysis['importance']}/10")
             else:
@@ -198,7 +208,21 @@ def process_articles_batch(
                 print("    â””â”€ âŒ Analysis failed or timed out.")
         except Exception as error:
             failed += 1
+            print(
+                f"Error processing article id={article_id} title={title!r}: "
+                f"{type(error).__name__}: {error}",
+                file=sys.stderr,
+                flush=True,
+            )
+            traceback.print_exc(file=sys.stderr)
             print(f"    â””â”€ âŒ Error: {error}")
+
+        outcome = "successfully persisted" if persisted else "failed; remains pending"
+        print(
+            f"    Outcome: {outcome} | article id={article_id} | "
+            f"{time.perf_counter() - started_at:.2f}s",
+            flush=True,
+        )
 
     remaining_count = count_unprocessed_articles(recent_days=recent_days)
 
@@ -213,7 +237,7 @@ def process_articles_batch(
             " so they are not searchable yet."
         )
         print("      Finish the window with: python -m backend.app.main --process --drain")
-    print("=" * 70)
+    print("=" * 70, flush=True)
 
     return {
         "processed": total_found,
@@ -311,4 +335,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

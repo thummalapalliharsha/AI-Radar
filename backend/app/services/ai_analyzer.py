@@ -1,5 +1,6 @@
 ﻿import json
 import sys
+import traceback
 from typing import Dict, Any, Optional
 import requests
 
@@ -222,6 +223,13 @@ def analyze_article(
         print("âš ï¸ Ollama returned non-JSON response.")
         return None
     except Exception as e:
+        print(
+            f"Unexpected analyzer error for article id={article.get('id', 'unknown')} "
+            f"title={title!r} source={source!r}: {type(e).__name__}: {e}",
+            file=sys.stderr,
+            flush=True,
+        )
+        traceback.print_exc(file=sys.stderr)
         print(f"âš ï¸ Unexpected analyzer error: {e}")
         return None
 
@@ -235,5 +243,4 @@ if __name__ == "__main__":
     print("Testing AI Analyzer with local Ollama...")
     res = analyze_article(test_article)
     print("Result:", json.dumps(res, indent=2))
-
 

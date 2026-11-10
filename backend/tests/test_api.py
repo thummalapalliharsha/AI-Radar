@@ -7,10 +7,20 @@ from typing import Any
 from unittest.mock import patch
 from urllib.parse import urlencode
 
-from backend.app.api.server import app, evening_briefing, morning_briefing
+from backend.app.api.server import (
+    app,
+    evening_briefing,
+    index_status,
+    morning_briefing,
+)
+from backend.app.ui.components import NO_GROUNDED_FACTS_MESSAGE
 
 
-async def get_response(path: str, params: dict[str, Any] | None = None) -> tuple[int, Any]:
+async def get_response(
+    path: str,
+    params: dict[str, Any] | None = None,
+    origin: str | None = None,
+) -> tuple[int, Any, dict[str, str]]:
     query_string = urlencode(params or {}).encode("ascii")
     response_messages: list[dict[str, Any]] = []
 
@@ -30,7 +40,8 @@ async def get_response(path: str, params: dict[str, Any] | None = None) -> tuple
         "raw_path": path.encode("ascii"),
         "query_string": query_string,
         "root_path": "",
-        "headers": [(b"host", b"localhost")],
+        "headers": [(b"host", b"localhost")]
+        + ([(b"origin", origin.encode("ascii"))] if origin else []),
         "client": ("testclient", 12345),
         "server": ("localhost", 80),
     }
@@ -46,18 +57,38 @@ async def get_response(path: str, params: dict[str, Any] | None = None) -> tuple
         for message in response_messages
         if message["type"] == "http.response.body"
     )
-    return status, json.loads(body)
+    response_headers = {
+        key.decode("latin-1").lower(): value.decode("latin-1")
+        for message in response_messages
+        if message["type"] == "http.response.start"
+        for key, value in message.get("headers", [])
+    }
+    return status, json.loads(body), response_headers
 
 
 class TestReadOnlyApi(unittest.IsolatedAsyncioTestCase):
     async def test_health_returns_exact_response(self):
-        status, body = await get_response("/api/health")
+        status, body, _ = await get_response("/api/health")
 
         self.assertEqual(status, 200)
         self.assertEqual(body, {"status": "ok"})
 
+    async def test_index_status_reports_selected_generation(self):
+        expected = {
+            "healthy": True,
+            "indexed": 2,
+            "metadata": 2,
+            "generation_id": "production",
+            "manifest_path": "C:/isolated/active.json",
+        }
+        with patch("backend.app.api.server.get_index_stats", return_value=expected):
+            status, body, _ = await get_response("/api/index/status")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body, expected)
+
     async def test_stories_24h_returns_only_the_required_shape(self):
-        status, body = await get_response(
+        status, body, _ = await get_response(
             "/api/stories",
             {"window": "24h"},
         )
@@ -288,7 +319,7 @@ class TestReadOnlyApi(unittest.IsolatedAsyncioTestCase):
                 return_value="A grounded answer. [1]",
             ),
         ):
-            status, body = await get_response(
+            status, body, _ = await get_response(
                 "/api/search",
                 {"q": "latest AI agents"},
             )
@@ -324,7 +355,7 @@ class TestReadOnlyApi(unittest.IsolatedAsyncioTestCase):
             patch("backend.app.api.server.classify_search_intent", return_value=False),
             patch("backend.app.api.server.search_vector_store") as search_vectors,
         ):
-            status, body = await get_response(
+            status, body, _ = await get_response(
                 "/api/search",
                 {"q": "capital of France"},
             )
@@ -346,7 +377,7 @@ class TestReadOnlyApi(unittest.IsolatedAsyncioTestCase):
             patch("backend.app.api.server.classify_search_intent", return_value=True),
             patch("backend.app.api.server.search_vector_store", return_value=[]),
         ):
-            status, body = await get_response(
+            status, body, _ = await get_response(
                 "/api/search",
                 {"q": "AI underwater agriculture"},
             )
@@ -356,14 +387,209 @@ class TestReadOnlyApi(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("answer", body)
         self.assertNotIn("sources", body)
 
+    async def test_search_maps_model_abstention_to_non_answer_status(self):
+        article = {
+            "title": "Kimi-maker Moonshot AI targets $2B in annual revenue",
+            "source": "TechCrunch AI",
+            "category": "AI Models",
+            "published": "2026-09-11T19:35:54+00:00",
+            "url": "https://example.com/moonshot",
+            "summary": "K3 usage figures have declined slightly.",
+            "why_it_matters": "",
+            "id": 2776,
+        }
+        with (
+            patch(
+                "backend.app.api.server.check_ollama",
+                return_value={
+                    "online": True,
+                    "has_embedding": True,
+                    "has_llm": True,
+                },
+            ),
+            patch("backend.app.api.server.classify_search_intent", return_value=True),
+            patch("backend.app.api.server.search_vector_store", return_value=[article]),
+            patch(
+                "backend.app.api.server.validate_retrieved_articles",
+                return_value=[article],
+            ),
+            patch(
+                "backend.app.api.server.generate_grounded_answer",
+                return_value=NO_GROUNDED_FACTS_MESSAGE,
+            ),
+        ):
+            status, body, _ = await get_response(
+                "/api/search",
+                {"q": "Kimi K3.1 Pro model launch"},
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "no_relevant_information")
+        self.assertNotIn("answer", body)
+        self.assertNotIn("sources", body)
+
+    async def test_search_downgrades_unmapped_citations_to_sources_only(self):
+        article = {
+            "title": "AI agent release",
+            "source": "AI Radar Source",
+            "category": "AI Agents",
+            "published": "2026-09-30T08:00:00+00:00",
+            "url": "https://example.com/agent",
+            "summary": "A verified summary.",
+            "why_it_matters": "A verified impact.",
+            "similarity": 0.91,
+            "distance": 0.09,
+            "id": 123,
+        }
+        with (
+            patch(
+                "backend.app.api.server.check_ollama",
+                return_value={
+                    "online": True,
+                    "has_embedding": True,
+                    "has_llm": True,
+                },
+            ),
+            patch("backend.app.api.server.classify_search_intent", return_value=True),
+            patch("backend.app.api.server.search_vector_store", return_value=[article]),
+            patch(
+                "backend.app.api.server.validate_retrieved_articles",
+                return_value=[article],
+            ),
+            patch(
+                "backend.app.api.server.generate_grounded_answer",
+                return_value="A claim with a nonexistent citation [2].",
+            ),
+        ):
+            status, body, _ = await get_response(
+                "/api/search",
+                {"q": "latest AI agents"},
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "sources_only")
+        self.assertNotIn("answer", body)
+        self.assertEqual(len(body["sources"]), 1)
+
+    async def test_search_returns_sources_only_when_grounding_fails_closed(self):
+        article = {
+            "title": "OpenAI working on new $30B raise at $1.25T valuation ahead of IPO",
+            "source": "TechCrunch AI",
+            "category": "AI Companies",
+            "published": "2026-10-22T22:08:24+00:00",
+            "url": "https://example.com/openai",
+            "summary": (
+                "OpenAI is seeking a $30B valuation ahead of its planned IPO."
+            ),
+            "why_it_matters": "",
+            "similarity": 0.91,
+            "distance": 0.09,
+            "id": 4910,
+        }
+        with (
+            patch(
+                "backend.app.api.server.check_ollama",
+                return_value={
+                    "online": True,
+                    "has_embedding": True,
+                    "has_llm": True,
+                },
+            ),
+            patch("backend.app.api.server.classify_search_intent", return_value=True),
+            patch("backend.app.api.server.search_vector_store", return_value=[article]),
+            patch(
+                "backend.app.api.server.validate_retrieved_articles",
+                return_value=[article],
+            ),
+            patch(
+                "backend.app.api.server.generate_grounded_answer",
+                return_value=None,
+            ),
+        ):
+            status, body, _ = await get_response(
+                "/api/search",
+                {"q": "What raise and valuation does the article report for OpenAI?"},
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "sources_only")
+        self.assertNotIn("answer", body)
+        self.assertEqual(len(body["sources"]), 1)
+        self.assertEqual(body["sources"][0]["title"], article["title"])
+
     async def test_search_rejects_whitespace_only_query(self):
-        status, body = await get_response(
+        status, body, _ = await get_response(
             "/api/search",
             {"q": "   "},
         )
 
         self.assertEqual(status, 422)
         self.assertIn("detail", body)
+
+    async def test_stories_category_filter_preserves_verified_story_shape(self):
+        published_timestamp = datetime.now(timezone.utc).timestamp() - 3600
+        row = {
+            "id": 42,
+            "title": "Verified research story",
+            "ai_summary": "An analyzed summary.",
+            "summary": "Original feed summary.",
+            "category": "AI Research",
+            "source": "Research Source",
+            "published_timestamp": published_timestamp,
+            "url": "https://example.com/research",
+            "why_it_matters": "A verified impact.",
+        }
+        with patch(
+            "backend.app.api.server.get_latest_news", return_value=[row]
+        ) as get_latest_news:
+            status, body, _ = await get_response(
+                "/api/stories",
+                {"window": "7d", "category": "AI Research"},
+            )
+
+        self.assertEqual(status, 200)
+        get_latest_news.assert_called_once_with(
+            limit=50, category="AI Research", min_importance=0
+        )
+        self.assertEqual(
+            body,
+            [
+                {
+                    "headline": "Verified research story",
+                    "summary": "An analyzed summary.",
+                    "category": "AI Research",
+                    "source": "Research Source",
+                    "published_at": datetime.fromtimestamp(
+                        published_timestamp, tz=timezone.utc
+                    ).isoformat(),
+                    "url": "https://example.com/research",
+                    "why_it_matters": "A verified impact.",
+                }
+            ],
+        )
+
+    async def test_stories_category_filter_rejects_unsupported_categories(self):
+        status, body, _ = await get_response(
+            "/api/stories",
+            {"window": "7d", "category": "Other"},
+        )
+
+        self.assertEqual(status, 422)
+        self.assertIn("detail", body)
+
+    async def test_cors_allows_only_configured_frontend_origins(self):
+        for origin in ("http://localhost:3000", "http://127.0.0.1:3010"):
+            with self.subTest(origin=origin):
+                status, body, headers = await get_response(
+                    "/api/health", origin=origin
+                )
+                self.assertEqual(status, 200, body)
+                self.assertEqual(headers.get("access-control-allow-origin"), origin)
+
+        _, _, headers = await get_response(
+            "/api/health", origin="http://127.0.0.1:3011"
+        )
+        self.assertNotIn("access-control-allow-origin", headers)
 
 
 if __name__ == "__main__":

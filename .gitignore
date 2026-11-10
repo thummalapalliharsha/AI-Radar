@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # Python
 # ============================================================
 
@@ -125,3 +125,14 @@ frontend/.vercel/
 # ============================================================
 
 frontend_old/
+# Local editor agent and browser artifacts
+.work/
+.manus/
+
+# Local diagnostic output
+/batch_debug.txt
+/batch_function.txt
+/batch_remaining.txt
+
+# Archived local briefing snapshots
+/data/evening_briefings/

@@ -180,6 +180,48 @@ OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
 EMBEDDING_MODEL=nomic-embed-text
 
+For an explicitly managed, versioned FAISS store, set
+`FAISS_GENERATION_MANIFEST_PATH` in the project-root `.env` file. The path may
+be absolute or relative to the project root:
+
+```
+FAISS_GENERATION_MANIFEST_PATH=C:\AI-Radar\data\vector_store\active-generations.json
+```
+
+The manifest owns immutable copies under its sibling `generations\` directory;
+entries must not escape the manifest directory. Use
+`initialize_generation_manifest()` to stage a validated production generation
+and candidate generation from existing index/metadata pairs into a new manifest
+root. That helper copies its inputs and does not change the active production
+files. The manifest's initial `active_generation` should remain the production
+generation until a separate promotion is approved.
+
+The API, CLI, dashboard, and any separately launched refresh worker must all
+receive the same manifest setting. Each process reads configuration at startup,
+so changing `.env`, the process environment, or deploying new loader code
+requires restarting that process. Changing only the active generation in the
+same manifest does not require a restart: every index operation reads and
+validates one manifest snapshot, and generations are immutable.
+
+After startup, verify selection with `python -m backend.app.main --status` or
+`GET /api/index/status`. A versioned store reports its manifest path, active
+generation ID, generation artifact paths, vector/metadata counts, dimension,
+and metric. Compare those values with the intended generation. `/api/health`
+only confirms that the API responds; it does not identify the loaded index.
+For stale-process checks, compare the process command line/start time and
+`/api/index/status` output with the deployed environment and generation. An
+older process that does not expose `/api/index/status` must be restarted before
+it can verify versioned-store selection.
+
+With a manifest configured, `--index` and dashboard refresh publish a new
+immutable generation and atomically switch the manifest only after its files
+have been reopened and validated. Database embedding flags are updated only
+after persistence succeeds. To roll back, call
+`switch_active_generation(manifest_path, previous_generation_id)`; it validates
+the retained generation before atomically switching the manifest. Generation
+switches serialize with sync jobs so the corresponding database flag update
+completes before a rollback or another manual switch takes effect. Do not edit
+the manifest by hand or overwrite files belonging to a registered generation.
 No paid AI API key is required for the core local pipeline.
 
 🗄️ Local Data

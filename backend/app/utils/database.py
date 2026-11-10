@@ -529,21 +529,51 @@ def mark_as_indexed(article_ids: List[int]) -> None:
         return
 
     connection = get_connection()
-    placeholders = ",".join("?" for _ in article_ids)
-    connection.execute(
-        f"UPDATE articles SET embedding_indexed = 1 WHERE id IN ({placeholders})",
-        list(article_ids),
-    )
-    connection.commit()
-    connection.close()
+    try:
+        placeholders = ",".join("?" for _ in article_ids)
+        connection.execute(
+            f"UPDATE articles SET embedding_indexed = 1 WHERE id IN ({placeholders})",
+            list(article_ids),
+        )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def reset_embedding_flags() -> None:
     """Clear every embedding flag so the next sync rebuilds the index."""
     connection = get_connection()
-    connection.execute("UPDATE articles SET embedding_indexed = 0")
-    connection.commit()
-    connection.close()
+    try:
+        connection.execute("UPDATE articles SET embedding_indexed = 0")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def replace_embedding_flags(article_ids: List[int]) -> None:
+    """Replace all embedding flags after a complete index rebuild succeeds."""
+    connection = get_connection()
+    try:
+        connection.execute("UPDATE articles SET embedding_indexed = 0")
+        if article_ids:
+            placeholders = ",".join("?" for _ in article_ids)
+            connection.execute(
+                f"UPDATE articles SET embedding_indexed = 1 "
+                f"WHERE id IN ({placeholders})",
+                list(article_ids),
+            )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def get_latest_news(
